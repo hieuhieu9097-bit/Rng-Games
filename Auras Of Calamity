@@ -1,6 +1,9 @@
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local VirtualUser = game:GetService("VirtualUser")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local MaterialService = game:GetService("MaterialService")
 
 local DiscoveredItemNames = {
     "Apollo", "Artemis", "Birch Tree", "Blade of Gems", "Blossom Dual Scythe",
@@ -19,12 +22,38 @@ local CustomPlaceNames = {
     "Workshop", "Title Shop", "Crafting Bar"
 }
 
-_G.DeltaToggleStates = _G.DeltaToggleStates or {Coin = false, Item = false, Star = false, Present = false, ESP = false, ESPFragment = false}
+-- Trạng thái toàn cục giữ nguyên
+_G.DeltaToggleStates = _G.DeltaToggleStates or {
+    Coin = false, Item = false, Star = false, Present = false, 
+    ESP = false, ESPFragment = false, FixLag = false, InfJump = false
+}
 _G.DeltaSelectedItemName = _G.DeltaSelectedItemName or nil
 _G.DeltaSelectedPlaceName = _G.DeltaSelectedPlaceName or nil 
+_G.DeltaSelectedPlayerName = _G.DeltaSelectedPlayerName or nil
+_G.DeltaSelectedConfigName = _G.DeltaSelectedConfigName or nil
+
+_G.WalkSpeedValue = _G.WalkSpeedValue or 16
+_G.JumpPowerValue = _G.JumpPowerValue or 50
 _G.ActiveESPObjects = _G.ActiveESPObjects or {}
 _G.FragmentCollectedCount = _G.FragmentCollectedCount or 0
 _G.IsCollectingFragments = _G.IsCollectingFragments or false
+
+-- SỬA LỖI CHÍNH TẢ TẠI ĐÂY (Thay Redfile thành readfile chính xác)
+local FileSystemSupported = false
+pcall(function()
+    if makefolder and writefile and readfile and isfile and listfiles then
+        FileSystemSupported = true
+    end
+end)
+
+local CONFIG_FOLDER = "Fortuna X/Config"
+
+if FileSystemSupported then
+    pcall(function()
+        makefolder("Fortuna X")
+        makefolder(CONFIG_FOLDER)
+    end)
+end
 
 local function GetPlaceCFrame(placeName)
     local targetCFrame = nil
@@ -142,8 +171,45 @@ local function UpdateESPState()
     end
 end
 
+local function ApplySuperFixLag(state)
+    _G.DeltaToggleStates.FixLag = state
+    if not state then return end
+    
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and (obj.Name == "Grass" or obj.Name == "Plant" or obj.Name == "CLOUDS") then
+            pcall(function() obj:Destroy() end)
+        end
+    end
+    
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        MaterialService.Use2022Materials = false
+        
+        for _, effect in ipairs(Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("ColorCorrectionEffect") then
+                effect.Enabled = false
+            end
+        end
+    end)
+    
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc:IsA("Texture") or desc:IsA("Decal") then
+            pcall(function() desc:Destroy() end)
+        elseif desc:IsA("BasePart") and not desc:IsA("MeshPart") then
+            desc.Material = Enum.Material.SmoothPlastic
+            desc.Reflectance = 0
+        elseif desc:IsA("MeshPart") then
+            desc.Material = Enum.Material.SmoothPlastic
+            desc.Reflectance = 0
+        end
+    end
+end
+
+-- Hàm khởi tạo UI an toàn tuyệt đối
 local function BuildFortunaUI()
-    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
+    local PlayerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
     if not PlayerGui then return end
 
     if PlayerGui:FindFirstChild("FortunaX_DeltaFix") then 
@@ -198,43 +264,36 @@ local function BuildFortunaUI()
     ContentContainer.Position = UDim2.new(0, 120, 0, 45)
     ContentContainer.Size = UDim2.new(1, -130, 1, -80)
 
+    -- KHỞI TẠO TABS
     local CollectTab = Instance.new("ScrollingFrame")
-    CollectTab.Name = "CollectTab"
-    CollectTab.Parent = ContentContainer
-    CollectTab.Size = UDim2.new(1, 0, 1, 0)
-    CollectTab.BackgroundTransparency = 1
-    CollectTab.ScrollBarThickness = 2
-    CollectTab.CanvasSize = UDim2.new(0, 0, 0, 210)
-    CollectTab.Visible = true
+    CollectTab.Name = "CollectTab"; CollectTab.Parent = ContentContainer
+    CollectTab.Size = UDim2.new(1, 0, 1, 0); CollectTab.BackgroundTransparency = 1
+    CollectTab.ScrollBarThickness = 2; CollectTab.CanvasSize = UDim2.new(0, 0, 0, 220); CollectTab.Visible = true
 
     local TeleportTab = Instance.new("ScrollingFrame")
-    TeleportTab.Name = "TeleportTab"
-    TeleportTab.Parent = ContentContainer
-    TeleportTab.Size = UDim2.new(1, 0, 1, 0)
-    TeleportTab.BackgroundTransparency = 1
-    TeleportTab.ScrollBarThickness = 2
-    TeleportTab.CanvasSize = UDim2.new(0, 0, 0, 350) 
-    TeleportTab.Visible = false
+    TeleportTab.Name = "TeleportTab"; TeleportTab.Parent = ContentContainer
+    TeleportTab.Size = UDim2.new(1, 0, 1, 0); TeleportTab.BackgroundTransparency = 1
+    TeleportTab.ScrollBarThickness = 2; TeleportTab.CanvasSize = UDim2.new(0, 0, 0, 350); TeleportTab.Visible = false
 
     local ESPTab = Instance.new("Frame")
-    ESPTab.Name = "ESPTab"
-    ESPTab.Parent = ContentContainer
-    ESPTab.Size = UDim2.new(1, 0, 1, 0)
-    ESPTab.BackgroundTransparency = 1
-    ESPTab.Visible = false
+    ESPTab.Name = "ESPTab"; ESPTab.Parent = ContentContainer
+    ESPTab.Size = UDim2.new(1, 0, 1, 0); ESPTab.BackgroundTransparency = 1; ESPTab.Visible = false
 
-    local CollectList = Instance.new("UIListLayout")
-    CollectList.Parent = CollectTab
-    CollectList.Padding = UDim.new(0, 5)
+    local PlayerTab = Instance.new("ScrollingFrame")
+    PlayerTab.Name = "PlayerTab"; PlayerTab.Parent = ContentContainer
+    PlayerTab.Size = UDim2.new(1, 0, 1, 0); PlayerTab.BackgroundTransparency = 1
+    PlayerTab.ScrollBarThickness = 2; PlayerTab.CanvasSize = UDim2.new(0, 0, 0, 300); PlayerTab.Visible = false
 
-    local TeleportList = Instance.new("UIListLayout")
-    TeleportList.Parent = TeleportTab
-    TeleportList.Padding = UDim.new(0, 5)
-    TeleportList.SortOrder = Enum.SortOrder.LayoutOrder 
+    local MiscTab = Instance.new("ScrollingFrame")
+    MiscTab.Name = "MiscTab"; MiscTab.Parent = ContentContainer
+    MiscTab.Size = UDim2.new(1, 0, 1, 0); MiscTab.BackgroundTransparency = 1
+    MiscTab.ScrollBarThickness = 2; MiscTab.CanvasSize = UDim2.new(0, 0, 0, 250); MiscTab.Visible = false
 
-    local ESPList = Instance.new("UIListLayout")
-    ESPList.Parent = ESPTab
-    ESPList.Padding = UDim.new(0, 5)
+    local CollectList = Instance.new("UIListLayout"); CollectList.Parent = CollectTab; CollectList.Padding = UDim.new(0, 5)
+    local TeleportList = Instance.new("UIListLayout"); TeleportList.Parent = TeleportTab; TeleportList.Padding = UDim.new(0, 5); TeleportList.SortOrder = Enum.SortOrder.LayoutOrder 
+    local ESPList = Instance.new("UIListLayout"); ESPList.Parent = ESPTab; ESPList.Padding = UDim.new(0, 5)
+    local PlayerList = Instance.new("UIListLayout"); PlayerList.Parent = PlayerTab; PlayerList.Padding = UDim.new(0, 5); PlayerList.SortOrder = Enum.SortOrder.LayoutOrder
+    local MiscList = Instance.new("UIListLayout"); MiscList.Parent = MiscTab; MiscList.Padding = UDim.new(0, 5); MiscList.SortOrder = Enum.SortOrder.LayoutOrder
 
     local Credits = Instance.new("TextLabel")
     Credits.Parent = MainFrame
@@ -250,17 +309,19 @@ local function BuildFortunaUI()
     local function createTabButton(name, order, targetTab)
         local TabBtn = Instance.new("TextButton")
         TabBtn.Parent = Sidebar
-        TabBtn.Size = UDim2.new(1, 0, 0, 32)
+        TabBtn.Size = UDim2.new(1, 0, 0, 28)
         TabBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
         TabBtn.Font = Enum.Font.GothamBold
         TabBtn.Text = name
         TabBtn.TextColor3 = Color3.fromRGB(160, 160, 165)
-        TabBtn.TextSize = 11
+        TabBtn.TextSize = 10
         
         TabBtn.MouseButton1Click:Connect(function()
             CollectTab.Visible = (targetTab == CollectTab)
             TeleportTab.Visible = (targetTab == TeleportTab)
             ESPTab.Visible = (targetTab == ESPTab)
+            PlayerTab.Visible = (targetTab == PlayerTab)
+            MiscTab.Visible = (targetTab == MiscTab)
             
             for _, child in ipairs(Sidebar:GetChildren()) do
                 if child:IsA("TextButton") then
@@ -277,6 +338,8 @@ local function BuildFortunaUI()
     local btnCollect = createTabButton("   Collect", 1, CollectTab)
     local btnTeleport = createTabButton("   Teleport", 2, TeleportTab)
     local btnESP = createTabButton("   ESP", 3, ESPTab)
+    local btnPlayer = createTabButton("   Player", 4, PlayerTab)
+    local btnMisc = createTabButton("   Misc", 5, MiscTab)
     
     btnCollect.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
     btnCollect.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -325,7 +388,6 @@ local function BuildFortunaUI()
 
     FragmentBtn.MouseButton1Click:Connect(function()
         if _G.IsCollectingFragments then return end 
-        
         _G.IsCollectingFragments = true
         _G.FragmentCollectedCount = 0
         FragmentBtn.Text = "Quét Fragment..."
@@ -354,17 +416,14 @@ local function BuildFortunaUI()
                     if prompt and referencePart then
                         local char = LocalPlayer.Character
                         local root = char and char:FindFirstChild("HumanoidRootPart")
-                        
                         if root then
                             root.CFrame = referencePart.CFrame
-                            task.wait(0.15) -- Giữ khoảng nghỉ nhỏ khi quét fragment
-                            
+                            task.wait(0.15)
                             if prompt and prompt.Parent then
                                 prompt.HoldDuration = 0
                                 fireproximityprompt(prompt)
                                 prompt:InputHoldBegin()
                                 prompt:InputHoldEnd()
-                                
                                 _G.FragmentCollectedCount = _G.FragmentCollectedCount + 1
                                 FragmentBtn.Text = "Collected: " .. _G.FragmentCollectedCount .. " Fragment"
                                 task.wait(0.15) 
@@ -373,61 +432,36 @@ local function BuildFortunaUI()
                     end
                 end
             end
-            
             _G.IsCollectingFragments = false
             FragmentBtn.Text = "Collect Fragment Memory"
         end)
     end)
 
+    -- TAB TELEPORT
     local DropdownOpen = false
     local DropdownMain = Instance.new("Frame")
-    DropdownMain.Name = "DropdownMain"
-    DropdownMain.Parent = TeleportTab
-    DropdownMain.Size = UDim2.new(1, -5, 0, 32)
-    DropdownMain.BackgroundColor3 = Color3.fromRGB(24, 28, 36) 
-    DropdownMain.LayoutOrder = 1 
+    DropdownMain.Parent = TeleportTab; DropdownMain.Size = UDim2.new(1, -5, 0, 32); DropdownMain.BackgroundColor3 = Color3.fromRGB(24, 28, 36); DropdownMain.LayoutOrder = 1 
 
     local DropTitleBtn = Instance.new("TextButton")
-    DropTitleBtn.Parent = DropdownMain
-    DropTitleBtn.Size = UDim2.new(1, 0, 1, 0)
-    DropTitleBtn.BackgroundTransparency = 1
-    DropTitleBtn.Font = Enum.Font.GothamBold
-    DropTitleBtn.Text = _G.DeltaSelectedItemName and "Selected: " .. _G.DeltaSelectedItemName or "Discovered Select v"
-    DropTitleBtn.TextColor3 = Color3.fromRGB(160, 190, 225) 
-    DropTitleBtn.TextSize = 10
+    DropTitleBtn.Parent = DropdownMain; DropTitleBtn.Size = UDim2.new(1, 0, 1, 0); DropTitleBtn.BackgroundTransparency = 1
+    DropTitleBtn.Font = Enum.Font.GothamBold; DropTitleBtn.Text = _G.DeltaSelectedItemName and "Selected: " .. _G.DeltaSelectedItemName or "Discovered Select v"
+    DropTitleBtn.TextColor3 = Color3.fromRGB(160, 190, 225); DropTitleBtn.TextSize = 10
 
     local TeleportActBtn = Instance.new("TextButton")
-    TeleportActBtn.Parent = TeleportTab
-    TeleportActBtn.Size = UDim2.new(1, -5, 0, 32)
-    TeleportActBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60) 
-    TeleportActBtn.Font = Enum.Font.GothamBold
-    TeleportActBtn.Text = "TELEPORT TO DISCOVERED"
-    TeleportActBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TeleportActBtn.TextSize = 10
-    TeleportActBtn.LayoutOrder = 2 
+    TeleportActBtn.Parent = TeleportTab; TeleportActBtn.Size = UDim2.new(1, -5, 0, 32); TeleportActBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60) 
+    TeleportActBtn.Font = Enum.Font.GothamBold; TeleportActBtn.Text = "TELEPORT TO DISCOVERED"; TeleportActBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TeleportActBtn.TextSize = 10; TeleportActBtn.LayoutOrder = 2 
 
     local ScrollContainer = Instance.new("ScrollingFrame")
-    ScrollContainer.Parent = TeleportTab
-    ScrollContainer.Size = UDim2.new(1, -5, 0, 80)
-    ScrollContainer.BackgroundColor3 = Color3.fromRGB(16, 19, 25)
-    ScrollContainer.Visible = false
-    ScrollContainer.ScrollBarThickness = 4
-    ScrollContainer.CanvasSize = UDim2.new(0, 0, 0, #DiscoveredItemNames * 26)
-    ScrollContainer.LayoutOrder = 1 
+    ScrollContainer.Parent = TeleportTab; ScrollContainer.Size = UDim2.new(1, -5, 0, 80); ScrollContainer.BackgroundColor3 = Color3.fromRGB(16, 19, 25)
+    ScrollContainer.Visible = false; ScrollContainer.ScrollBarThickness = 4; ScrollContainer.CanvasSize = UDim2.new(0, 0, 0, #DiscoveredItemNames * 26); ScrollContainer.LayoutOrder = 1 
 
-    local ScrollList = Instance.new("UIListLayout")
-    ScrollList.Parent = ScrollContainer
-    ScrollList.Padding = UDim.new(0, 2)
+    local ScrollList = Instance.new("UIListLayout"); ScrollList.Parent = ScrollContainer; ScrollList.Padding = UDim.new(0, 2)
 
     for _, name in ipairs(DiscoveredItemNames) do
         local ItemBtn = Instance.new("TextButton")
-        ItemBtn.Parent = ScrollContainer
-        ItemBtn.Size = UDim2.new(1, -8, 0, 24)
-        ItemBtn.BackgroundColor3 = Color3.fromRGB(24, 28, 36)
-        ItemBtn.Font = Enum.Font.Gotham
-        ItemBtn.Text = name
-        ItemBtn.TextColor3 = Color3.fromRGB(140, 160, 185)
-        ItemBtn.TextSize = 10
+        ItemBtn.Parent = ScrollContainer; ItemBtn.Size = UDim2.new(1, -8, 0, 24); ItemBtn.BackgroundColor3 = Color3.fromRGB(24, 28, 36)
+        ItemBtn.Font = Enum.Font.Gotham; ItemBtn.Text = name; ItemBtn.TextColor3 = Color3.fromRGB(140, 160, 185); ItemBtn.TextSize = 10
         
         ItemBtn.MouseButton1Click:Connect(function()
             _G.DeltaSelectedItemName = name
@@ -437,10 +471,7 @@ local function BuildFortunaUI()
         end)
     end
 
-    DropTitleBtn.MouseButton1Click:Connect(function()
-        DropdownOpen = not DropdownOpen
-        ScrollContainer.Visible = DropdownOpen
-    end)
+    DropTitleBtn.MouseButton1Click:Connect(function() DropdownOpen = not DropdownOpen; ScrollContainer.Visible = DropdownOpen end)
 
     TeleportActBtn.MouseButton1Click:Connect(function()
         if _G.DeltaSelectedItemName then
@@ -469,62 +500,35 @@ local function BuildFortunaUI()
                 if root then root.CFrame = targetCFrame + Vector3.new(0, 2.5, 0) end
             else
                 DropTitleBtn.Text = "[ Item Not Spawned Yet ]"
-                task.delay(2, function()
-                    DropTitleBtn.Text = _G.DeltaSelectedItemName and "Selected: " .. _G.DeltaSelectedItemName or "Discovered Select v"
-                end)
+                task.delay(2, function() DropTitleBtn.Text = _G.DeltaSelectedItemName and "Selected: " .. _G.DeltaSelectedItemName or "Discovered Select v" end)
             end
         end
     end)
 
     local PlaceDropdownOpen = false
     local PlaceDropdownMain = Instance.new("Frame")
-    PlaceDropdownMain.Name = "PlaceDropdownMain"
-    PlaceDropdownMain.Parent = TeleportTab
-    PlaceDropdownMain.Size = UDim2.new(1, -5, 0, 32)
-    PlaceDropdownMain.BackgroundColor3 = Color3.fromRGB(24, 28, 36) 
-    PlaceDropdownMain.LayoutOrder = 3 
+    PlaceDropdownMain.Parent = TeleportTab; PlaceDropdownMain.Size = UDim2.new(1, -5, 0, 32); PlaceDropdownMain.BackgroundColor3 = Color3.fromRGB(24, 28, 36); PlaceDropdownMain.LayoutOrder = 3 
 
     local PlaceDropTitleBtn = Instance.new("TextButton")
-    PlaceDropTitleBtn.Parent = PlaceDropdownMain
-    PlaceDropTitleBtn.Size = UDim2.new(1, 0, 1, 0)
-    PlaceDropTitleBtn.BackgroundTransparency = 1
-    PlaceDropTitleBtn.Font = Enum.Font.GothamBold
-    PlaceDropTitleBtn.Text = _G.DeltaSelectedPlaceName and "Place: " .. _G.DeltaSelectedPlaceName or "Select Place v"
-    PlaceDropTitleBtn.TextColor3 = Color3.fromRGB(160, 190, 225)
-    PlaceDropTitleBtn.TextSize = 10
+    PlaceDropTitleBtn.Parent = PlaceDropdownMain; PlaceDropTitleBtn.Size = UDim2.new(1, 0, 1, 0); PlaceDropTitleBtn.BackgroundTransparency = 1
+    PlaceDropTitleBtn.Font = Enum.Font.GothamBold; PlaceDropTitleBtn.Text = _G.DeltaSelectedPlaceName and "Place: " .. _G.DeltaSelectedPlaceName or "Select Place v"
+    PlaceDropTitleBtn.TextColor3 = Color3.fromRGB(160, 190, 225); PlaceDropTitleBtn.TextSize = 10
 
     local TeleportPlaceActBtn = Instance.new("TextButton")
-    TeleportPlaceActBtn.Parent = TeleportTab
-    TeleportPlaceActBtn.Size = UDim2.new(1, -5, 0, 32)
-    TeleportPlaceActBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60) 
-    TeleportPlaceActBtn.Font = Enum.Font.GothamBold
-    TeleportPlaceActBtn.Text = "TELEPORT TO PLACE"
-    TeleportPlaceActBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TeleportPlaceActBtn.TextSize = 10
-    TeleportPlaceActBtn.LayoutOrder = 4 
+    TeleportPlaceActBtn.Parent = TeleportTab; TeleportPlaceActBtn.Size = UDim2.new(1, -5, 0, 32); TeleportPlaceActBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60) 
+    TeleportPlaceActBtn.Font = Enum.Font.GothamBold; TeleportPlaceActBtn.Text = "TELEPORT TO PLACE"; TeleportPlaceActBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TeleportPlaceActBtn.TextSize = 10; TeleportPlaceActBtn.LayoutOrder = 4 
 
     local PlaceScrollContainer = Instance.new("ScrollingFrame")
-    PlaceScrollContainer.Parent = TeleportTab
-    PlaceScrollContainer.Size = UDim2.new(1, -5, 0, 75)
-    PlaceScrollContainer.BackgroundColor3 = Color3.fromRGB(16, 19, 25)
-    PlaceScrollContainer.Visible = false
-    PlaceScrollContainer.ScrollBarThickness = 4
-    PlaceScrollContainer.CanvasSize = UDim2.new(0, 0, 0, #CustomPlaceNames * 25)
-    PlaceScrollContainer.LayoutOrder = 3
+    PlaceScrollContainer.Parent = TeleportTab; PlaceScrollContainer.Size = UDim2.new(1, -5, 0, 75); PlaceScrollContainer.BackgroundColor3 = Color3.fromRGB(16, 19, 25)
+    PlaceScrollContainer.Visible = false; PlaceScrollContainer.ScrollBarThickness = 4; PlaceScrollContainer.CanvasSize = UDim2.new(0, 0, 0, #CustomPlaceNames * 25); PlaceScrollContainer.LayoutOrder = 3
 
-    local PlaceScrollList = Instance.new("UIListLayout")
-    PlaceScrollList.Parent = PlaceScrollContainer
-    PlaceScrollList.Padding = UDim.new(0, 2)
+    local PlaceScrollList = Instance.new("UIListLayout"); PlaceScrollList.Parent = PlaceScrollContainer; PlaceScrollList.Padding = UDim.new(0, 2)
 
     for _, placeName in ipairs(CustomPlaceNames) do
         local PlaceBtn = Instance.new("TextButton")
-        PlaceBtn.Parent = PlaceScrollContainer
-        PlaceBtn.Size = UDim2.new(1, -8, 0, 23)
-        PlaceBtn.BackgroundColor3 = Color3.fromRGB(24, 28, 36)
-        PlaceBtn.Font = Enum.Font.Gotham
-        PlaceBtn.Text = placeName
-        PlaceBtn.TextColor3 = Color3.fromRGB(140, 160, 185)
-        PlaceBtn.TextSize = 10
+        PlaceBtn.Parent = PlaceScrollContainer; PlaceBtn.Size = UDim2.new(1, -8, 0, 23); PlaceBtn.BackgroundColor3 = Color3.fromRGB(24, 28, 36)
+        PlaceBtn.Font = Enum.Font.Gotham; PlaceBtn.Text = placeName; PlaceBtn.TextColor3 = Color3.fromRGB(140, 160, 185); PlaceBtn.TextSize = 10
         
         PlaceBtn.MouseButton1Click:Connect(function()
             _G.DeltaSelectedPlaceName = placeName
@@ -534,87 +538,298 @@ local function BuildFortunaUI()
         end)
     end
 
-    PlaceDropTitleBtn.MouseButton1Click:Connect(function()
-        PlaceDropdownOpen = not PlaceDropdownOpen
-        PlaceScrollContainer.Visible = PlaceDropdownOpen
-    end)
+    PlaceDropTitleBtn.MouseButton1Click:Connect(function() PlaceDropdownOpen = not PlaceDropdownOpen; PlaceScrollContainer.Visible = PlaceDropdownOpen end)
 
     TeleportPlaceActBtn.MouseButton1Click:Connect(function()
         if _G.DeltaSelectedPlaceName then
             local targetCFrame = GetPlaceCFrame(_G.DeltaSelectedPlaceName)
-            
             if targetCFrame then
                 local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if root then 
-                    root.CFrame = targetCFrame + Vector3.new(0, 2.5, 0) 
-                end
+                if root then root.CFrame = targetCFrame + Vector3.new(0, 2.5, 0) end
             else
                 PlaceDropTitleBtn.Text = "[ Target Object Not Found ]"
-                task.delay(2, function()
-                    PlaceDropTitleBtn.Text = _G.DeltaSelectedPlaceName and "Place: " .. _G.DeltaSelectedPlaceName or "Select Place v"
-                end)
+                task.delay(2, function() PlaceDropTitleBtn.Text = _G.DeltaSelectedPlaceName and "Place: " .. _G.DeltaSelectedPlaceName or "Select Place v" end)
             end
         end
     end)
 
+    -- TAB ESP
     local ESPBtn = Instance.new("TextButton")
-    ESPBtn.Parent = ESPTab
-    ESPBtn.Size = UDim2.new(1, 0, 0, 32)
-    ESPBtn.BackgroundColor3 = _G.DeltaToggleStates.ESP and Color3.fromRGB(30, 55, 45) or Color3.fromRGB(22, 22, 26)
-    ESPBtn.Font = Enum.Font.GothamBold
-    ESPBtn.Text = "ESP All Discovered : " .. (_G.DeltaToggleStates.ESP and "[ON]" or "[OFF]")
-    ESPBtn.TextColor3 = _G.DeltaToggleStates.ESP and Color3.fromRGB(100, 255, 150) or Color3.fromRGB(160, 160, 165)
-    ESPBtn.TextSize = 10
+    ESPBtn.Parent = ESPTab; ESPBtn.Size = UDim2.new(1, 0, 0, 32); ESPBtn.BackgroundColor3 = _G.DeltaToggleStates.ESP and Color3.fromRGB(30, 55, 45) or Color3.fromRGB(22, 22, 26)
+    ESPBtn.Font = Enum.Font.GothamBold; ESPBtn.Text = "ESP All Discovered : " .. (_G.DeltaToggleStates.ESP and "[ON]" or "[OFF]")
+    ESPBtn.TextColor3 = _G.DeltaToggleStates.ESP and Color3.fromRGB(100, 255, 150) or Color3.fromRGB(160, 160, 165); ESPBtn.TextSize = 10
 
     ESPBtn.MouseButton1Click:Connect(function()
         _G.DeltaToggleStates.ESP = not _G.DeltaToggleStates.ESP
         if _G.DeltaToggleStates.ESP then
-            ESPBtn.Text = "ESP All Discovered : [ON]"
-            ESPBtn.BackgroundColor3 = Color3.fromRGB(30, 55, 45)
-            ESPBtn.TextColor3 = Color3.fromRGB(100, 255, 150)
+            ESPBtn.Text = "ESP All Discovered : [ON]"; ESPBtn.BackgroundColor3 = Color3.fromRGB(30, 55, 45); ESPBtn.TextColor3 = Color3.fromRGB(100, 255, 150)
             UpdateESPState()
         else
-            ESPBtn.Text = "ESP All Discovered : [OFF]"
-            ESPBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
-            ESPBtn.TextColor3 = Color3.fromRGB(160, 160, 165)
+            ESPBtn.Text = "ESP All Discovered : [OFF]"; ESPBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 26); ESPBtn.TextColor3 = Color3.fromRGB(160, 160, 165)
             UpdateESPState()
         end
     end)
 
     local ESPFragmentBtn = Instance.new("TextButton")
-    ESPFragmentBtn.Parent = ESPTab
-    ESPFragmentBtn.Size = UDim2.new(1, 0, 0, 32)
-    ESPFragmentBtn.BackgroundColor3 = _G.DeltaToggleStates.ESPFragment and Color3.fromRGB(55, 30, 50) or Color3.fromRGB(22, 22, 26)
-    ESPFragmentBtn.Font = Enum.Font.GothamBold
-    ESPFragmentBtn.Text = "ESP Memory Fragment : " .. (_G.DeltaToggleStates.ESPFragment and "[ON]" or "[OFF]")
-    ESPFragmentBtn.TextColor3 = _G.DeltaToggleStates.ESPFragment and Color3.fromRGB(255, 130, 255) or Color3.fromRGB(160, 160, 165)
-    ESPFragmentBtn.TextSize = 10
+    ESPFragmentBtn.Parent = ESPTab; ESPFragmentBtn.Size = UDim2.new(1, 0, 0, 32); ESPFragmentBtn.BackgroundColor3 = _G.DeltaToggleStates.ESPFragment and Color3.fromRGB(55, 30, 50) or Color3.fromRGB(22, 22, 26)
+    ESPFragmentBtn.Font = Enum.Font.GothamBold; ESPFragmentBtn.Text = "ESP Memory Fragment : " .. (_G.DeltaToggleStates.ESPFragment and "[ON]" or "[OFF]")
+    ESPFragmentBtn.TextColor3 = _G.DeltaToggleStates.ESPFragment and Color3.fromRGB(255, 130, 255) or Color3.fromRGB(160, 160, 165); ESPFragmentBtn.TextSize = 10
 
     ESPFragmentBtn.MouseButton1Click:Connect(function()
         _G.DeltaToggleStates.ESPFragment = not _G.DeltaToggleStates.ESPFragment
         if _G.DeltaToggleStates.ESPFragment then
-            ESPFragmentBtn.Text = "ESP Memory Fragment : [ON]"
-            ESPFragmentBtn.BackgroundColor3 = Color3.fromRGB(55, 30, 50)
-            ESPFragmentBtn.TextColor3 = Color3.fromRGB(255, 130, 255)
+            ESPFragmentBtn.Text = "ESP Memory Fragment : [ON]"; ESPFragmentBtn.BackgroundColor3 = Color3.fromRGB(55, 30, 50); ESPFragmentBtn.TextColor3 = Color3.fromRGB(255, 130, 255)
             UpdateESPState()
         else
-            ESPFragmentBtn.Text = "ESP Memory Fragment : [OFF]"
-            ESPFragmentBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
-            ESPFragmentBtn.TextColor3 = Color3.fromRGB(160, 160, 165)
+            ESPFragmentBtn.Text = "ESP Memory Fragment : [OFF]"; ESPFragmentBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 26); ESPFragmentBtn.TextColor3 = Color3.fromRGB(160, 160, 165)
             UpdateESPState()
         end
     end)
 
+    -- TAB PLAYER
+    local WsContainer = Instance.new("Frame")
+    WsContainer.Parent = PlayerTab; WsContainer.Size = UDim2.new(1, -5, 0, 35); WsContainer.BackgroundColor3 = Color3.fromRGB(22, 22, 26); WsContainer.LayoutOrder = 1
+    
+    local WsLabel = Instance.new("TextLabel")
+    WsLabel.Parent = WsContainer; WsLabel.Size = UDim2.new(0.5, 0, 1, 0); WsLabel.BackgroundTransparency = 1
+    WsLabel.Font = Enum.Font.GothamBold; WsLabel.Text = "  Walk Speed:"; WsLabel.TextColor3 = Color3.fromRGB(200, 200, 205); WsLabel.TextSize = 10; WsLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local WsInput = Instance.new("TextBox")
+    WsInput.Parent = WsContainer; WsInput.Size = UDim2.new(0.4, 0, 0.7, 0); WsInput.Position = UDim2.new(0.55, 0, 0.15, 0)
+    WsInput.BackgroundColor3 = Color3.fromRGB(14, 14, 18); WsInput.Font = Enum.Font.GothamBold; WsInput.Text = tostring(_G.WalkSpeedValue)
+    WsInput.TextColor3 = Color3.fromRGB(255, 255, 255); WsInput.TextSize = 11
+
+    WsInput.FocusLost:Connect(function()
+        local val = tonumber(WsInput.Text)
+        if val then _G.WalkSpeedValue = val else _G.WalkSpeedValue = 16; WsInput.Text = "16" end
+        pcall(function() if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.WalkSpeed = _G.WalkSpeedValue end end)
+    end)
+
+    local JpContainer = Instance.new("Frame")
+    JpContainer.Parent = PlayerTab; JpContainer.Size = UDim2.new(1, -5, 0, 35); JpContainer.BackgroundColor3 = Color3.fromRGB(22, 22, 26); JpContainer.LayoutOrder = 2
+
+    local JpLabel = Instance.new("TextLabel")
+    JpLabel.Parent = JpContainer; JpLabel.Size = UDim2.new(0.5, 0, 1, 0); JpLabel.BackgroundTransparency = 1
+    JpLabel.Font = Enum.Font.GothamBold; JpLabel.Text = "  Jump Power:"; JpLabel.TextColor3 = Color3.fromRGB(200, 200, 205); JpLabel.TextSize = 10; JpLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local JpInput = Instance.new("TextBox")
+    JpInput.Parent = JpContainer; JpInput.Size = UDim2.new(0.4, 0, 0.7, 0); JpInput.Position = UDim2.new(0.55, 0, 0.15, 0)
+    JpInput.BackgroundColor3 = Color3.fromRGB(14, 14, 18); JpInput.Font = Enum.Font.GothamBold; JpInput.Text = tostring(_G.JumpPowerValue)
+    JpInput.TextColor3 = Color3.fromRGB(255, 255, 255); JpInput.TextSize = 11
+
+    JpInput.FocusLost:Connect(function()
+        local val = tonumber(JpInput.Text)
+        if val then _G.JumpPowerValue = val else _G.JumpPowerValue = 50; JpInput.Text = "50" end
+        pcall(function() if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.JumpPower = _G.JumpPowerValue end end)
+    end)
+
+    local InfJumpBtn = Instance.new("TextButton")
+    InfJumpBtn.Parent = PlayerTab; InfJumpBtn.Size = UDim2.new(1, -5, 0, 30); InfJumpBtn.BackgroundColor3 = _G.DeltaToggleStates.InfJump and Color3.fromRGB(30, 55, 45) or Color3.fromRGB(22, 22, 26); InfJumpBtn.LayoutOrder = 3
+    InfJumpBtn.Font = Enum.Font.GothamBold; InfJumpBtn.Text = "Infinity Jump : " .. (_G.DeltaToggleStates.InfJump and "[ON]" or "[OFF]")
+    InfJumpBtn.TextColor3 = _G.DeltaToggleStates.InfJump and Color3.fromRGB(100, 255, 150) or Color3.fromRGB(160, 160, 165); InfJumpBtn.TextSize = 10
+
+    InfJumpBtn.MouseButton1Click:Connect(function()
+        _G.DeltaToggleStates.InfJump = not _G.DeltaToggleStates.InfJump
+        if _G.DeltaToggleStates.InfJump then
+            InfJumpBtn.Text = "Infinity Jump : [ON]"; InfJumpBtn.BackgroundColor3 = Color3.fromRGB(30, 55, 45); InfJumpBtn.TextColor3 = Color3.fromRGB(100, 255, 150)
+        else
+            InfJumpBtn.Text = "Infinity Jump : [OFF]"; InfJumpBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 26); InfJumpBtn.TextColor3 = Color3.fromRGB(160, 160, 165)
+        end
+    end)
+
+    local PlrDropdownOpen = false
+    local PlrDropdownMain = Instance.new("Frame")
+    PlrDropdownMain.Parent = PlayerTab; PlrDropdownMain.Size = UDim2.new(1, -5, 0, 32); PlrDropdownMain.BackgroundColor3 = Color3.fromRGB(24, 28, 36); PlrDropdownMain.LayoutOrder = 4 
+
+    local PlrDropTitleBtn = Instance.new("TextButton")
+    PlrDropTitleBtn.Parent = PlrDropdownMain; PlrDropTitleBtn.Size = UDim2.new(1, 0, 1, 0); PlrDropTitleBtn.BackgroundTransparency = 1
+    PlrDropTitleBtn.Font = Enum.Font.GothamBold; PlrDropTitleBtn.Text = _G.DeltaSelectedPlayerName and "Player: " .. _G.DeltaSelectedPlayerName or "Select Server Player v"
+    PlrDropTitleBtn.TextColor3 = Color3.fromRGB(160, 190, 225); PlrDropTitleBtn.TextSize = 10
+
+    local TeleportPlrActBtn = Instance.new("TextButton")
+    TeleportPlrActBtn.Parent = PlayerTab; TeleportPlrActBtn.Size = UDim2.new(1, -5, 0, 32); TeleportPlrActBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60) 
+    TeleportPlrActBtn.Font = Enum.Font.GothamBold; TeleportPlrActBtn.Text = "TELEPORT TO PLAYER"; TeleportPlrActBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TeleportPlrActBtn.TextSize = 10; TeleportPlrActBtn.LayoutOrder = 5 
+
+    local PlrScrollContainer = Instance.new("ScrollingFrame")
+    PlrScrollContainer.Parent = PlayerTab; PlrScrollContainer.Size = UDim2.new(1, -5, 0, 80); PlrScrollContainer.BackgroundColor3 = Color3.fromRGB(16, 19, 25)
+    PlrScrollContainer.Visible = false; PlrScrollContainer.ScrollBarThickness = 4; PlrScrollContainer.LayoutOrder = 4
+
+    local PlrScrollList = Instance.new("UIListLayout"); PlrScrollList.Parent = PlrScrollContainer; PlrScrollList.Padding = UDim.new(0, 2)
+
+    local function RefreshPlayerDropdown()
+        for _, c in ipairs(PlrScrollContainer:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+        local count = 0
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then
+                count = count + 1
+                local PBtn = Instance.new("TextButton")
+                PBtn.Parent = PlrScrollContainer; PBtn.Size = UDim2.new(1, -8, 0, 24); PBtn.BackgroundColor3 = Color3.fromRGB(24, 28, 36)
+                PBtn.Font = Enum.Font.Gotham; PBtn.Text = p.DisplayName .. " (@" .. p.Name .. ")"; PBtn.TextColor3 = Color3.fromRGB(140, 160, 185); PBtn.TextSize = 9
+                
+                PBtn.MouseButton1Click:Connect(function()
+                    _G.DeltaSelectedPlayerName = p.Name
+                    PlrDropTitleBtn.Text = "Player: " .. p.Name
+                    PlrDropdownOpen = false
+                    PlrScrollContainer.Visible = false
+                end)
+            end
+        end
+        PlrScrollContainer.CanvasSize = UDim2.new(0, 0, 0, count * 26)
+    end
+
+    PlrDropTitleBtn.MouseButton1Click:Connect(function()
+        PlrDropdownOpen = not PlrDropdownOpen
+        if PlrDropdownOpen then RefreshPlayerDropdown() end
+        PlrScrollContainer.Visible = PlrDropdownOpen
+    end)
+
+    TeleportPlrActBtn.MouseButton1Click:Connect(function()
+        if _G.DeltaSelectedPlayerName then
+            local targetPlr = Players:FindFirstChild(_G.DeltaSelectedPlayerName)
+            local tChar = targetPlr and targetPlr.Character
+            local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+            if tRoot then
+                local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if myRoot then myRoot.CFrame = tRoot.CFrame + Vector3.new(0, 2.5, 0) end
+            else
+                PlrDropTitleBtn.Text = "[ Player Not Found/Dead ]"
+                task.delay(2, function() PlrDropTitleBtn.Text = _G.DeltaSelectedPlayerName and "Player: " .. _G.DeltaSelectedPlayerName or "Select Server Player v" end)
+            end
+        end
+    end)
+
+    -- TAB MISC (CONFIG & FIX LAG)
+    local CfgDropdownOpen = false
+    local CfgDropdownMain = Instance.new("Frame")
+    CfgDropdownMain.Parent = MiscTab; CfgDropdownMain.Size = UDim2.new(1, -5, 0, 32); CfgDropdownMain.BackgroundColor3 = Color3.fromRGB(24, 28, 36); CfgDropdownMain.LayoutOrder = 1 
+
+    local CfgDropTitleBtn = Instance.new("TextButton")
+    CfgDropTitleBtn.Parent = CfgDropdownMain; CfgDropTitleBtn.Size = UDim2.new(1, 0, 1, 0); CfgDropTitleBtn.BackgroundTransparency = 1
+    CfgDropTitleBtn.Font = Enum.Font.GothamBold; CfgDropTitleBtn.Text = _G.DeltaSelectedConfigName and "Config Select: " .. _G.DeltaSelectedConfigName or "Config Select v"
+    CfgDropTitleBtn.TextColor3 = Color3.fromRGB(160, 190, 225); CfgDropTitleBtn.TextSize = 10
+
+    local CfgScrollContainer = Instance.new("ScrollingFrame")
+    CfgScrollContainer.Parent = MiscTab; CfgScrollContainer.Size = UDim2.new(1, -5, 0, 75); CfgScrollContainer.BackgroundColor3 = Color3.fromRGB(16, 19, 25)
+    CfgScrollContainer.Visible = false; CfgScrollContainer.ScrollBarThickness = 4; CfgScrollContainer.LayoutOrder = 1
+
+    local CfgScrollList = Instance.new("UIListLayout"); CfgScrollList.Parent = CfgScrollContainer; CfgScrollList.Padding = UDim.new(0, 2)
+
+    local function RefreshConfigList()
+        for _, c in ipairs(CfgScrollContainer:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+        if FileSystemSupported then
+            local files = pcall(function() return listfiles(CONFIG_FOLDER) end) and listfiles(CONFIG_FOLDER) or {}
+            local count = 0
+            for _, path in ipairs(files) do
+                local filename = path:match("^.+/(.+)$") or path:match("^.+\\(.+)$") or path
+                filename = filename:gsub("%.json$", "")
+                count = count + 1
+                
+                local CBtn = Instance.new("TextButton")
+                CBtn.Parent = CfgScrollContainer; CBtn.Size = UDim2.new(1, -8, 0, 24); CBtn.BackgroundColor3 = Color3.fromRGB(24, 28, 36)
+                CBtn.Font = Enum.Font.Gotham; CBtn.Text = filename; CBtn.TextColor3 = Color3.fromRGB(140, 160, 185); CBtn.TextSize = 10
+                
+                CBtn.MouseButton1Click:Connect(function()
+                    _G.DeltaSelectedConfigName = filename
+                    CfgDropTitleBtn.Text = "Config Select: " .. filename
+                    CfgDropdownOpen = false
+                    CfgScrollContainer.Visible = false
+                end)
+            end
+            CfgScrollContainer.CanvasSize = UDim2.new(0, 0, 0, count * 25)
+        else
+            CfgDropTitleBtn.Text = "[ Executor Not Support Config System ]"
+        end
+    end
+
+    CfgDropTitleBtn.MouseButton1Click:Connect(function()
+        CfgDropdownOpen = not CfgDropdownOpen
+        if CfgDropdownOpen then RefreshConfigList() end
+        CfgScrollContainer.Visible = CfgDropdownOpen
+    end)
+
+    local SaveContainer = Instance.new("Frame")
+    SaveContainer.Parent = MiscTab; SaveContainer.Size = UDim2.new(1, -5, 0, 32); SaveContainer.BackgroundTransparency = 1; SaveContainer.LayoutOrder = 2
+
+    local NewCfgNameBox = Instance.new("TextBox")
+    NewCfgNameBox.Parent = SaveContainer; NewCfgNameBox.Size = UDim2.new(0.6, -5, 1, 0)
+    NewCfgNameBox.BackgroundColor3 = Color3.fromRGB(22, 22, 26); NewCfgNameBox.Font = Enum.Font.Gotham; NewCfgNameBox.PlaceholderText = "New Config Name..."
+    NewCfgNameBox.Text = ""; NewCfgNameBox.TextColor3 = Color3.fromRGB(255, 255, 255); NewCfgNameBox.TextSize = 10
+
+    local SaveActBtn = Instance.new("TextButton")
+    SaveActBtn.Parent = SaveContainer; SaveActBtn.Size = UDim2.new(0.4, 0, 1, 0); SaveActBtn.Position = UDim2.new(0.6, 0, 0, 0)
+    SaveActBtn.BackgroundColor3 = Color3.fromRGB(30, 55, 45); SaveActBtn.Font = Enum.Font.GothamBold; SaveActBtn.Text = "Save Config"
+    SaveActBtn.TextColor3 = Color3.fromRGB(100, 255, 150); SaveActBtn.TextSize = 10
+
+    SaveActBtn.MouseButton1Click:Connect(function()
+        if not FileSystemSupported then return end
+        local name = NewCfgNameBox.Text ~= "" and NewCfgNameBox.Text or _G.DeltaSelectedConfigName
+        if not name or name == "" then return end
+        
+        local data = {
+            Toggles = _G.DeltaToggleStates,
+            WalkSpeed = _G.WalkSpeedValue,
+            JumpPower = _G.JumpPowerValue
+        }
+        
+        local HttpService = game:GetService("HttpService")
+        local json = HttpService:JSONEncode(data)
+        
+        pcall(function()
+            writefile(CONFIG_FOLDER .. "/" .. name .. ".json", json)
+            _G.DeltaSelectedConfigName = name
+            CfgDropTitleBtn.Text = "Config Select: " .. name
+            NewCfgNameBox.Text = ""
+            if CfgDropdownOpen then RefreshConfigList() end
+        end)
+    end)
+
+    local LoadActBtn = Instance.new("TextButton")
+    LoadActBtn.Parent = MiscTab; LoadActBtn.Size = UDim2.new(1, -5, 0, 32); LoadActBtn.BackgroundColor3 = Color3.fromRGB(35, 45, 60); LoadActBtn.LayoutOrder = 3 
+    LoadActBtn.Font = Enum.Font.GothamBold; LoadActBtn.Text = "Load Config"; LoadActBtn.TextColor3 = Color3.fromRGB(150, 200, 255); LoadActBtn.TextSize = 10
+
+    LoadActBtn.MouseButton1Click:Connect(function()
+        if not FileSystemSupported or not _G.DeltaSelectedConfigName then return end
+        local path = CONFIG_FOLDER .. "/" .. _G.DeltaSelectedConfigName .. ".json"
+        
+        if isfile(path) then
+            local success, content = pcall(function() return readfile(path) end)
+            if success then
+                local HttpService = game:GetService("HttpService")
+                local data = pcall(function() return HttpService:JSONDecode(content) end) and HttpService:JSONDecode(content)
+                if data then
+                    if data.Toggles then for k, v in pairs(data.Toggles) do _G.DeltaToggleStates[k] = v end end
+                    if data.WalkSpeed then _G.WalkSpeedValue = data.WalkSpeed end
+                    if data.JumpPower then _G.JumpPowerValue = data.JumpPower end
+                    
+                    BuildFortunaUI()
+                    ApplySuperFixLag(_G.DeltaToggleStates.FixLag)
+                end
+            end
+        end
+    end)
+
+    -- NÚT FIX LAG (DƯỚI CÙNG TAB MISC)
+    local FixLagBtn = Instance.new("TextButton")
+    FixLagBtn.Parent = MiscTab; FixLagBtn.Size = UDim2.new(1, -5, 0, 32); FixLagBtn.BackgroundColor3 = _G.DeltaToggleStates.FixLag and Color3.fromRGB(55, 40, 25) or Color3.fromRGB(22, 22, 26); FixLagBtn.LayoutOrder = 100
+    FixLagBtn.Font = Enum.Font.GothamBold; FixLagBtn.Text = "Super Fix Lag : " .. (_G.DeltaToggleStates.FixLag and "[ON]" or "[OFF]")
+    FixLagBtn.TextColor3 = _G.DeltaToggleStates.FixLag and Color3.fromRGB(255, 180, 100) or Color3.fromRGB(160, 160, 165); FixLagBtn.TextSize = 10
+
+    FixLagBtn.MouseButton1Click:Connect(function()
+        local current = not _G.DeltaToggleStates.FixLag
+        ApplySuperFixLag(current)
+        if current then
+            FixLagBtn.Text = "Super Fix Lag : [ON]"; FixLagBtn.BackgroundColor3 = Color3.fromRGB(55, 40, 25); FixLagBtn.TextColor3 = Color3.fromRGB(255, 180, 100)
+        else
+            FixLagBtn.Text = "Super Fix Lag : [OFF]"; FixLagBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 26); FixLagBtn.TextColor3 = Color3.fromRGB(160, 160, 165)
+        end
+    end)
+
+    -- Nút FX nổi để mở/tắt
     local FloatingBtn = Instance.new("TextButton")
-    FloatingBtn.Name = "FloatingBtn"
-    FloatingBtn.Parent = ScreenGui
-    FloatingBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-    FloatingBtn.Position = UDim2.new(0, 10, 0, 100)
-    FloatingBtn.Size = UDim2.new(0, 40, 0, 40)
-    FloatingBtn.Font = Enum.Font.GothamBold
-    FloatingBtn.Text = "FX"
-    FloatingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    FloatingBtn.TextSize = 12
+    FloatingBtn.Name = "FloatingBtn"; FloatingBtn.Parent = ScreenGui; FloatingBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    FloatingBtn.Position = UDim2.new(0, 10, 0, 100); FloatingBtn.Size = UDim2.new(0, 40, 0, 40)
+    FloatingBtn.Font = Enum.Font.GothamBold; FloatingBtn.Text = "FX"; FloatingBtn.TextColor3 = Color3.fromRGB(255, 255, 255); FloatingBtn.TextSize = 12
 
     local UiVisible = true
     FloatingBtn.MouseButton1Click:Connect(function()
@@ -626,12 +841,17 @@ local function BuildFortunaUI()
     UpdateESPState()
 end
 
-BuildFortunaUI()
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1)
-    BuildFortunaUI()
+-- ÉP BUỘC CHẠY GUI
+task.spawn(function()
+    pcall(BuildFortunaUI)
 end)
 
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    pcall(BuildFortunaUI)
+end)
+
+-- XỬ LÝ VÒNG LẶP HỆ THỐNG GOM VÀ THÔNG SỐ PLAYER
 local function fastFirePrompt(prompt)
     if prompt and prompt:IsA("ProximityPrompt") then
         task.spawn(function()
@@ -683,6 +903,16 @@ local function getAllActiveTargets()
     return list
 end
 
+UserInputService.JumpRequest:Connect(function()
+    if _G.DeltaToggleStates.InfJump then
+        pcall(function()
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildWhichIsA("Humanoid")
+            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end)
+    end
+end)
+
 if _G.CoreLoopActive == nil then
     _G.CoreLoopActive = true
     
@@ -700,15 +930,25 @@ if _G.CoreLoopActive == nil then
             task.wait(0.2)
             ApplyESP(descendant, Color3.fromRGB(255, 100, 255))
         end
+        if _G.DeltaToggleStates.FixLag and descendant:IsA("BasePart") and (descendant.Name == "Grass" or descendant.Name == "Plant" or descendant.Name == "CLOUDS") then
+            pcall(function() descendant:Destroy() end)
+        end
     end)
 
-    -- ĐOẠN VÒNG LẶP ĐÃ ĐƯỢC FIX TRÁNH GAME PAUSED:
     task.spawn(function()
         while true do
-            task.wait(0.2) -- Tăng lên 0.2s để giảm tải cho game, không quét dồn dập
-            local states = _G.DeltaToggleStates
+            task.wait(0.2)
             
-            if states and (states.Coin or states.Item or states.Star or states.Present) then
+            pcall(function()
+                local char = LocalPlayer.Character
+                local hum = char and char:FindFirstChild("Humanoid")
+                if hum then
+                    if hum.WalkSpeed ~= _G.WalkSpeedValue then hum.WalkSpeed = _G.WalkSpeedValue end
+                    if hum.JumpPower ~= _G.JumpPowerValue then hum.JumpPower = _G.JumpPowerValue end
+                end
+            end)
+            
+            if _G.DeltaToggleStates.Coin or _G.DeltaToggleStates.Item or _G.DeltaToggleStates.Star or _G.DeltaToggleStates.Present then
                 local allTargets = getAllActiveTargets()
                 if #allTargets > 0 then
                     local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -716,21 +956,16 @@ if _G.CoreLoopActive == nil then
                         local primaryPrompt = allTargets[1]
                         local targetPart = primaryPrompt.Parent
                         if targetPart and targetPart:IsA("BasePart") then
-                            -- Dịch chuyển 1 lần duy nhất đến mục tiêu chính
                             root.CFrame = targetPart.CFrame
                             fastFirePrompt(primaryPrompt)
-                            
-                            -- Quét nhanh các món xung quanh bán kính gần đó
                             sweepEntireZone(targetPart.Position)
-                            
-                            -- Đứng đợi 0.1 giây cho game xử lý nhận vật phẩm xong rồi mới chuyển tiếp
                             task.wait(0.1) 
                         end
                     end
                 end
             end
             
-            if states and (states.ESP or states.ESPFragment) then
+            if _G.DeltaToggleStates.ESP or _G.DeltaToggleStates.ESPFragment then
                 UpdateESPState()
                 task.wait(1.5)
             end
