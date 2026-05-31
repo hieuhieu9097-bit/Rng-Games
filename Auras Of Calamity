@@ -2,7 +2,6 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local VirtualUser = game:GetService("VirtualUser")
 
--- Danh sách vật phẩm Discovered cố định
 local DiscoveredItemNames = {
     "Apollo", "Artemis", "Birch Tree", "Blade of Gems", "Blossom Dual Scythe",
     "Box of Exotic Essences", "Carmine Claymore of the Insouciant", "Cataclyst Containment",
@@ -16,12 +15,10 @@ local DiscoveredItemNames = {
     "Vertigilis", "Winning Rock", "Withered Kagsinai", "Wooden Sword", "Yield of the Blood God", "keith"
 }
 
--- Danh sách các địa điểm cố định trên Map
 local CustomPlaceNames = {
     "Workshop", "Title Shop", "Crafting Bar"
 }
 
--- Khởi tạo biến Global để lưu trạng thái giữa các lần hồi sinh (Reset)
 _G.DeltaToggleStates = _G.DeltaToggleStates or {Coin = false, Item = false, Star = false, Present = false, ESP = false, ESPFragment = false}
 _G.DeltaSelectedItemName = _G.DeltaSelectedItemName or nil
 _G.DeltaSelectedPlaceName = _G.DeltaSelectedPlaceName or nil 
@@ -29,9 +26,6 @@ _G.ActiveESPObjects = _G.ActiveESPObjects or {}
 _G.FragmentCollectedCount = _G.FragmentCollectedCount or 0
 _G.IsCollectingFragments = _G.IsCollectingFragments or false
 
--- ==========================================
--- HỆ THỐNG ĐỊA ĐIỂM (PATH CỐ ĐỊNH)
--- ==========================================
 local function GetPlaceCFrame(placeName)
     local targetCFrame = nil
     pcall(function()
@@ -56,9 +50,6 @@ local function GetPlaceCFrame(placeName)
     return targetCFrame
 end
 
--- ==========================================
--- HỆ THỐNG XỬ LÝ ESP TRỰC TIẾP (DELTA MOBILE)
--- ==========================================
 local function RemoveESP(item)
     if _G.ActiveESPObjects[item] then
         if _G.ActiveESPObjects[item].Highlight then pcall(function() _G.ActiveESPObjects[item].Highlight:Destroy() end) end
@@ -151,9 +142,6 @@ local function UpdateESPState()
     end
 end
 
--- ==========================================
--- GIAO DIỆN CHÍNH (CLASSIC DELTA COMPATIBLE)
--- ==========================================
 local function BuildFortunaUI()
     local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
     if not PlayerGui then return end
@@ -188,7 +176,7 @@ local function BuildFortunaUI()
     Title.Size = UDim2.new(1, 0, 1, 0)
     Title.BackgroundTransparency = 1
     Title.Font = Enum.Font.GothamBold
-    Title.Text = "Fortune X | Aura  Of Calamity"
+    Title.Text = "Fortuna X | Auras of Calamity"
     Title.TextColor3 = Color3.fromRGB(255, 255, 255)
     Title.TextSize = 12
 
@@ -254,7 +242,7 @@ local function BuildFortunaUI()
     Credits.Size = UDim2.new(1, -130, 0, 20)
     Credits.BackgroundTransparency = 1
     Credits.Font = Enum.Font.SourceSansItalic
-    Credits.Text = "Made By Second (Delta Client Optimized)"
+    Credits.Text = "Made By Second"
     Credits.TextColor3 = Color3.fromRGB(120, 120, 125)
     Credits.TextSize = 11
     Credits.TextXAlignment = Enum.TextXAlignment.Left
@@ -293,12 +281,11 @@ local function BuildFortunaUI()
     btnCollect.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
     btnCollect.TextColor3 = Color3.fromRGB(255, 255, 255)
 
-    -- --- LOẠI 2: NÚT BẬT/TẮT (AUTO COLLECT SYSTEM) ---
     local function createCollectToggle(text, key)
         local Btn = Instance.new("TextButton")
         Btn.Parent = CollectTab
         Btn.Size = UDim2.new(1, -5, 0, 30)
-        Btn.BackgroundColor3 = _G.DeltaToggleStates[key] and Color3.fromRGB(30, 55, 45) or Color3.fromRGB(22, 22, 26) -- Xanh lục sẫm khi bật
+        Btn.BackgroundColor3 = _G.DeltaToggleStates[key] and Color3.fromRGB(30, 55, 45) or Color3.fromRGB(22, 22, 26) 
         Btn.Font = Enum.Font.GothamBold
         Btn.Text = text .. (_G.DeltaToggleStates[key] and " : [ON]" or " : [OFF]")
         Btn.TextColor3 = _G.DeltaToggleStates[key] and Color3.fromRGB(100, 255, 150) or Color3.fromRGB(160, 160, 165)
@@ -323,18 +310,17 @@ local function BuildFortunaUI()
     createCollectToggle("Auto Collect Falling Star", "Star")
     createCollectToggle("Auto Collect Present", "Present")
 
-    -- LOẠI 3: NÚT NHẤN MỘT LẦN (ACTION TRIGGER)
     local FragmentBtn = Instance.new("TextButton")
     FragmentBtn.Parent = CollectTab
     FragmentBtn.Size = UDim2.new(1, -5, 0, 32)
-    FragmentBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60) -- Màu tím đậm đặc trưng của nút hành động
+    FragmentBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60) 
     FragmentBtn.Font = Enum.Font.GothamBold
-    FragmentBtn.Text = "Auto Collect Memory Fragment"
+    FragmentBtn.Text = "Collect Fragment Memory"
     FragmentBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     FragmentBtn.TextSize = 10
 
     if _G.IsCollectingFragments then
-        FragmentBtn.Text = "Collecting: " .. _G.FragmentCollectedCount .. "/50 Memory Fragment"
+        FragmentBtn.Text = "Collected: " .. _G.FragmentCollectedCount .. " Fragment Memory"
     end
 
     FragmentBtn.MouseButton1Click:Connect(function()
@@ -356,13 +342,11 @@ local function BuildFortunaUI()
                 FragmentBtn.Text = "[ No Fragments Spawned On Map ]"
                 task.wait(2)
                 _G.IsCollectingFragments = false
-                FragmentBtn.Text = "Auto Collect Memory Fragment"
+                FragmentBtn.Text = "Collect Fragment Memory"
                 return
             end
             
             for _, currentFragment in ipairs(allFragments) do
-                if _G.FragmentCollectedCount >= 50 then break end
-                
                 if currentFragment and currentFragment.Parent then
                     local prompt = currentFragment:FindFirstChildWhichIsA("ProximityPrompt", true)
                     local referencePart = currentFragment:IsA("BasePart") and currentFragment or currentFragment:FindFirstChildWhichIsA("BasePart", true)
@@ -373,7 +357,7 @@ local function BuildFortunaUI()
                         
                         if root then
                             root.CFrame = referencePart.CFrame
-                            task.wait(0.12)
+                            task.wait(0.15) -- Giữ khoảng nghỉ nhỏ khi quét fragment
                             
                             if prompt and prompt.Parent then
                                 prompt.HoldDuration = 0
@@ -382,7 +366,7 @@ local function BuildFortunaUI()
                                 prompt:InputHoldEnd()
                                 
                                 _G.FragmentCollectedCount = _G.FragmentCollectedCount + 1
-                                FragmentBtn.Text = "Collecting: " .. _G.FragmentCollectedCount .. "/50 Fragment"
+                                FragmentBtn.Text = "Collected: " .. _G.FragmentCollectedCount .. " Fragment"
                                 task.wait(0.15) 
                             end
                         end
@@ -391,23 +375,16 @@ local function BuildFortunaUI()
             end
             
             _G.IsCollectingFragments = false
-            FragmentBtn.Text = "Auto Collect Memory Fragment"
+            FragmentBtn.Text = "Collect Fragment Memory"
         end)
     end)
 
-    -- ==========================================
-    -- --- TAB 2: TELEPORT SYSTEM (MÀU CHUẨN CHỨC NĂNG) ---
-    -- ==========================================
-    
-    -- [ CỤM 1: DISCOVERED SYSTEM ]
-    
-    -- 1. LOẠI 1: Nút chọn Discovered (Màu chọn - Xám Xanh Slate)
     local DropdownOpen = false
     local DropdownMain = Instance.new("Frame")
     DropdownMain.Name = "DropdownMain"
     DropdownMain.Parent = TeleportTab
     DropdownMain.Size = UDim2.new(1, -5, 0, 32)
-    DropdownMain.BackgroundColor3 = Color3.fromRGB(24, 28, 36) -- Nền xám xanh dịu mắt
+    DropdownMain.BackgroundColor3 = Color3.fromRGB(24, 28, 36) 
     DropdownMain.LayoutOrder = 1 
 
     local DropTitleBtn = Instance.new("TextButton")
@@ -419,18 +396,16 @@ local function BuildFortunaUI()
     DropTitleBtn.TextColor3 = Color3.fromRGB(160, 190, 225) 
     DropTitleBtn.TextSize = 10
 
-    -- 2. LOẠI 3: Nút Teleport Discovered (Nút nhấn một lần - Tím Đậm)
     local TeleportActBtn = Instance.new("TextButton")
     TeleportActBtn.Parent = TeleportTab
     TeleportActBtn.Size = UDim2.new(1, -5, 0, 32)
-    TeleportActBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60) -- Đồng điệu màu nút Fragment hành động
+    TeleportActBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60) 
     TeleportActBtn.Font = Enum.Font.GothamBold
     TeleportActBtn.Text = "TELEPORT TO DISCOVERED"
     TeleportActBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     TeleportActBtn.TextSize = 10
     TeleportActBtn.LayoutOrder = 2 
 
-    -- Khung danh sách cuộn vật phẩm Discovered (Màu chọn)
     local ScrollContainer = Instance.new("ScrollingFrame")
     ScrollContainer.Parent = TeleportTab
     ScrollContainer.Size = UDim2.new(1, -5, 0, 80)
@@ -501,15 +476,12 @@ local function BuildFortunaUI()
         end
     end)
 
-    -- [ CỤM 2: PLACE SYSTEM ]
-    
-    -- 3. LOẠI 1: Nút chọn Place (Màu chọn - Xám Xanh Slate)
     local PlaceDropdownOpen = false
     local PlaceDropdownMain = Instance.new("Frame")
     PlaceDropdownMain.Name = "PlaceDropdownMain"
     PlaceDropdownMain.Parent = TeleportTab
     PlaceDropdownMain.Size = UDim2.new(1, -5, 0, 32)
-    PlaceDropdownMain.BackgroundColor3 = Color3.fromRGB(24, 28, 36) -- Giữ nguyên tone màu chọn
+    PlaceDropdownMain.BackgroundColor3 = Color3.fromRGB(24, 28, 36) 
     PlaceDropdownMain.LayoutOrder = 3 
 
     local PlaceDropTitleBtn = Instance.new("TextButton")
@@ -521,18 +493,16 @@ local function BuildFortunaUI()
     PlaceDropTitleBtn.TextColor3 = Color3.fromRGB(160, 190, 225)
     PlaceDropTitleBtn.TextSize = 10
 
-    -- 4. LOẠI 3: Nút Teleport Place (Nút nhấn một lần - Tím Đậm)
     local TeleportPlaceActBtn = Instance.new("TextButton")
     TeleportPlaceActBtn.Parent = TeleportTab
     TeleportPlaceActBtn.Size = UDim2.new(1, -5, 0, 32)
-    TeleportPlaceActBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60) -- Đồng màu tím với hành động Teleport trên
+    TeleportPlaceActBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60) 
     TeleportPlaceActBtn.Font = Enum.Font.GothamBold
     TeleportPlaceActBtn.Text = "TELEPORT TO PLACE"
     TeleportPlaceActBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     TeleportPlaceActBtn.TextSize = 10
     TeleportPlaceActBtn.LayoutOrder = 4 
 
-    -- Khung danh sách cuộn địa điểm (Màu chọn)
     local PlaceScrollContainer = Instance.new("ScrollingFrame")
     PlaceScrollContainer.Parent = TeleportTab
     PlaceScrollContainer.Size = UDim2.new(1, -5, 0, 75)
@@ -587,7 +557,6 @@ local function BuildFortunaUI()
         end
     end)
 
-    -- --- TAB 3: ESP SYSTEM (LOẠI 2: BẬT/TẮT TOGGLE) ---
     local ESPBtn = Instance.new("TextButton")
     ESPBtn.Parent = ESPTab
     ESPBtn.Size = UDim2.new(1, 0, 0, 32)
@@ -636,7 +605,6 @@ local function BuildFortunaUI()
         end
     end)
 
-    -- Floating Token đóng mở giao diện 
     local FloatingBtn = Instance.new("TextButton")
     FloatingBtn.Name = "FloatingBtn"
     FloatingBtn.Parent = ScreenGui
@@ -658,16 +626,12 @@ local function BuildFortunaUI()
     UpdateESPState()
 end
 
--- Khởi chạy giao diện ban đầu và lắng nghe sự kiện hồi sinh nhân vật
 BuildFortunaUI()
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
     BuildFortunaUI()
 end)
 
--- ==========================================
--- VÒNG LẶP CORE CHẠY NGẦM ĐỊNH KỲ VĨNH VIỄN
--- ==========================================
 local function fastFirePrompt(prompt)
     if prompt and prompt:IsA("ProximityPrompt") then
         task.spawn(function()
@@ -738,9 +702,10 @@ if _G.CoreLoopActive == nil then
         end
     end)
 
+    -- ĐOẠN VÒNG LẶP ĐÃ ĐƯỢC FIX TRÁNH GAME PAUSED:
     task.spawn(function()
         while true do
-            task.wait(0.05)
+            task.wait(0.2) -- Tăng lên 0.2s để giảm tải cho game, không quét dồn dập
             local states = _G.DeltaToggleStates
             
             if states and (states.Coin or states.Item or states.Star or states.Present) then
@@ -751,14 +716,15 @@ if _G.CoreLoopActive == nil then
                         local primaryPrompt = allTargets[1]
                         local targetPart = primaryPrompt.Parent
                         if targetPart and targetPart:IsA("BasePart") then
-                            for i = 1, 5 do
-                                if targetPart and targetPart.Parent then
-                                    root.CFrame = targetPart.CFrame
-                                    fastFirePrompt(primaryPrompt)
-                                    sweepEntireZone(targetPart.Position)
-                                end
-                                task.wait(0.01)
-                            end
+                            -- Dịch chuyển 1 lần duy nhất đến mục tiêu chính
+                            root.CFrame = targetPart.CFrame
+                            fastFirePrompt(primaryPrompt)
+                            
+                            -- Quét nhanh các món xung quanh bán kính gần đó
+                            sweepEntireZone(targetPart.Position)
+                            
+                            -- Đứng đợi 0.1 giây cho game xử lý nhận vật phẩm xong rồi mới chuyển tiếp
+                            task.wait(0.1) 
                         end
                     end
                 end
